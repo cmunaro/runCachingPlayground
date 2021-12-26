@@ -22,9 +22,15 @@ fun main() = runBlocking {
         .getOrNull()
     println("Result: $nullResult")
 
-//    val failedResult = Network.service.brokenAPIResult()
-//    println("Result: $failedResult")
+    val failedResult = Network.service.brokenAPIResult()
+    println("Result: $failedResult")
 
+    val successResult = Network.service.getRandomResult(
+        fromNumber = 1,
+        toNumber = 10,
+        numbersOfResults = 3
+    ).getOrNull()
+    println("Result: $successResult")
 }
 
 @Throws(Exception::class)

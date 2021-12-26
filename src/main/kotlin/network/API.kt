@@ -12,6 +12,13 @@ interface API {
         @Query("count") numbersOfResults: Int,
     ): List<Int>
 
+    @GET("api/v1.0/random")
+    suspend fun getRandomResult(
+        @Query("min") fromNumber: Int,
+        @Query("max") toNumber: Int,
+        @Query("count") numbersOfResults: Int,
+    ): Result<List<Int>>
+
     @GET("api/v1.0/stoCazzo")
     suspend fun brokenAPI(): List<Int>
 
