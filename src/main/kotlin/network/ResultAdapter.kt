@@ -1,126 +1,64 @@
 package network
 
 import okhttp3.Request
-import okhttp3.ResponseBody
-import okio.IOException
 import okio.Timeout
 import retrofit2.*
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 
+class ResultAdapterFactory private constructor() : CallAdapter.Factory() {
+    override fun get(returnType: Type?, annotations: Array<out Annotation>?, retrofit: Retrofit?): CallAdapter<*, *>? {
+        if (returnType !is ParameterizedType) return null
+        val completeType = returnType.actualTypeArguments.first() as? ParameterizedType ?: return null
+        if (completeType.rawType != Result::class.java) return null
+        val responseType = completeType.actualTypeArguments.first()
+        return ResultAdapter<Any>(responseType)
+    }
 
-class ResultAdapterFactory : CallAdapter.Factory() {
-
-    override fun get(
-        returnType: Type,
-        annotations: Array<Annotation>,
-        retrofit: Retrofit
-    ): CallAdapter<*, *>? {
-        if (Call::class.java != getRawType(returnType)) return null
-
-        check(returnType is ParameterizedType) {
-            "return type must be parameterized as Call<Result<<Foo>> or Call<Result<out Foo>>"
-        }
-
-        val responseType = getParameterUpperBound(0, returnType)
-        if (getRawType(responseType) != Result::class.java) return null
-
-        check(responseType is ParameterizedType) { "Response must be parameterized as Result<Foo> or Result<out Foo>" }
-
-        val successBodyType = getParameterUpperBound(0, responseType)
-
-        val errorBodyConverter =
-            retrofit.nextResponseBodyConverter<Throwable>(null, Throwable::class.java, annotations)
-
-        return ResultAdapter<Any, Throwable>(successBodyType, errorBodyConverter)
+    companion object {
+        @JvmStatic
+        fun create() = ResultAdapterFactory()
     }
 }
 
-class ResultAdapter<R : Any, T: Throwable>(
-    private val successType: Type,
-    private val errorBodyConverter: Converter<ResponseBody, T>
-) : CallAdapter<R, Call<Result<R>>> {
+class ResultAdapter<R>(private val responseType: Type) : CallAdapter<R, Call<Result<R>>> {
+    override fun responseType(): Type = responseType
 
-    override fun responseType(): Type = successType
+    override fun adapt(call: Call<R>): Call<Result<R>> = ResultCall(call)
 
-    override fun adapt(call: Call<R>): Call<Result<R>> {
-        return NetworkResponseCall(call, errorBodyConverter)
-    }
-
-    internal class NetworkResponseCall<R : Any, T: Throwable>(
-        private val delegate: Call<R>,
-        private val errorConverter: Converter<ResponseBody, T>
-    ) : Call<Result<R>> {
-
+    inner class ResultCall<R>(private val call: Call<R>) : Call<Result<R>> {
         override fun enqueue(callback: Callback<Result<R>>) {
-            return delegate.enqueue(object : Callback<R> {
+            call.enqueue(object : Callback<R> {
                 override fun onResponse(call: Call<R>, response: Response<R>) {
-                    val body = response.body()
-                    val code = response.code()
-                    val error = response.errorBody()
-
-                    if (response.isSuccessful) {
-                        if (body != null) {
-                            callback.onResponse(
-                                this@NetworkResponseCall,
-                                Response.success(Result.success(body))
-                            )
-                        } else {
-                            callback.onResponse(
-                                this@NetworkResponseCall,
-                                Response.success(Result.failure(KotlinNullPointerException()))
-                            )
-                        }
-                    } else {
-                        val errorBody = when {
-                            error == null -> null
-                            error.contentLength() == 0L -> null
-                            else -> try {
-                                errorConverter.convert(error)
-                            } catch (ex: Exception) {
-                                null
-                            }
-                        }
-                        if (errorBody != null) {
-                            callback.onResponse(
-                                this@NetworkResponseCall,
-                                Response.success(Result.failure(errorBody))
-                            )
-                        } else {
-                            callback.onResponse(
-                                this@NetworkResponseCall,
-                                Response.success(Result.failure(KotlinNullPointerException()))
-                            )
-                        }
-                    }
+                    val result: Result<R> = if (response.isSuccessful) {
+                        response.body()
+                            ?.let { Result.success(it) }
+                            ?: Result.failure(HttpException(response))
+                    } else Result.failure(HttpException(response))
+                    callback.onResponse(this@ResultCall, Response.success(result))
                 }
 
                 override fun onFailure(call: Call<R>, throwable: Throwable) {
-                    val networkResponse: Result<R> = when (throwable) {
-                        is IOException -> Result.failure(throwable)
-                        else -> Result.failure(throwable)
-                    }
-                    callback.onResponse(this@NetworkResponseCall, Response.success(networkResponse))
+                    val networkResponse: Result<R> = Result.failure(throwable)
+                    callback.onResponse(this@ResultCall, Response.success(networkResponse))
                 }
             })
         }
 
-        override fun isExecuted() = delegate.isExecuted
-
-        override fun clone() = NetworkResponseCall(delegate.clone(), errorConverter)
-
-        override fun isCanceled() = delegate.isCanceled
-
-        override fun cancel() = delegate.cancel()
-
         override fun execute(): Response<Result<R>> {
-            throw UnsupportedOperationException("NetworkResponseCall doesn't support execute")
+            throw UnsupportedOperationException("ResultCall doesn't support execute")
         }
 
-        override fun request(): Request = delegate.request()
+        override fun clone(): Call<Result<R>> = clone()
 
-        override fun timeout(): Timeout {
-            return Timeout.NONE
-        }
+        override fun isExecuted() = call.isExecuted
+
+        override fun cancel() = call.cancel()
+
+        override fun isCanceled() = call.isCanceled
+
+        override fun request(): Request = call.request()
+
+        override fun timeout(): Timeout = call.timeout()
     }
 }
