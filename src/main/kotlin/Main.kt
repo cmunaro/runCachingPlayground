@@ -32,7 +32,10 @@ fun main() = runBlocking {
         fromNumber = 1,
         toNumber = 10,
         numbersOfResults = 3
-    ).getOrNull()
+    )
+        .onFailure { println("Fail") }
+        .onSuccess { println("Success") }
+        .getOrNull()
     println("getRandom with Result response: $successResult")
 }
 

@@ -7,11 +7,19 @@ import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 
 class ResultAdapterFactory private constructor() : CallAdapter.Factory() {
-    override fun get(returnType: Type?, annotations: Array<out Annotation>?, retrofit: Retrofit?): CallAdapter<*, *>? {
+    override fun get(
+        returnType: Type?,
+        annotations: Array<out Annotation>?,
+        retrofit: Retrofit?
+    ): CallAdapter<*, *>? {
         if (returnType !is ParameterizedType) return null
-        val completeType = returnType.actualTypeArguments.firstOrNull() as? ParameterizedType ?: return null
+        val completeType = returnType.actualTypeArguments
+            .firstOrNull() as? ParameterizedType
+            ?: return null
         if (completeType.rawType != Result::class.java) return null
-        val responseType = completeType.actualTypeArguments.firstOrNull() ?: return null
+        val responseType = completeType.actualTypeArguments
+            .firstOrNull()
+            ?: return null
         return ResultAdapter<Any>(responseType)
     }
 
@@ -21,7 +29,8 @@ class ResultAdapterFactory private constructor() : CallAdapter.Factory() {
     }
 }
 
-class ResultAdapter<R>(private val responseType: Type) : CallAdapter<R, Call<Result<R>>> {
+class ResultAdapter<R>(private val responseType: Type) :
+    CallAdapter<R, Call<Result<R>>> {
     override fun responseType(): Type = responseType
 
     override fun adapt(call: Call<R>): Call<Result<R>> = ResultCall(call)
@@ -35,12 +44,18 @@ class ResultAdapter<R>(private val responseType: Type) : CallAdapter<R, Call<Res
                             ?.let { Result.success(it) }
                             ?: Result.failure(HttpException(response))
                     } else Result.failure(HttpException(response))
-                    callback.onResponse(this@ResultCall, Response.success(result))
+                    callback.onResponse(
+                        this@ResultCall,
+                        Response.success(result)
+                    )
                 }
 
                 override fun onFailure(call: Call<R>, throwable: Throwable) {
                     val failureResult: Result<R> = Result.failure(throwable)
-                    callback.onResponse(this@ResultCall, Response.success(failureResult))
+                    callback.onResponse(
+                        this@ResultCall,
+                        Response.success(failureResult)
+                    )
                 }
             })
         }
