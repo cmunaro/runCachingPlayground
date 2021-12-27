@@ -9,9 +9,9 @@ import java.lang.reflect.Type
 class ResultAdapterFactory private constructor() : CallAdapter.Factory() {
     override fun get(returnType: Type?, annotations: Array<out Annotation>?, retrofit: Retrofit?): CallAdapter<*, *>? {
         if (returnType !is ParameterizedType) return null
-        val completeType = returnType.actualTypeArguments.first() as? ParameterizedType ?: return null
+        val completeType = returnType.actualTypeArguments.firstOrNull() as? ParameterizedType ?: return null
         if (completeType.rawType != Result::class.java) return null
-        val responseType = completeType.actualTypeArguments.first()
+        val responseType = completeType.actualTypeArguments.firstOrNull() ?: return null
         return ResultAdapter<Any>(responseType)
     }
 
@@ -39,8 +39,8 @@ class ResultAdapter<R>(private val responseType: Type) : CallAdapter<R, Call<Res
                 }
 
                 override fun onFailure(call: Call<R>, throwable: Throwable) {
-                    val networkResponse: Result<R> = Result.failure(throwable)
-                    callback.onResponse(this@ResultCall, Response.success(networkResponse))
+                    val failureResult: Result<R> = Result.failure(throwable)
+                    callback.onResponse(this@ResultCall, Response.success(failureResult))
                 }
             })
         }
